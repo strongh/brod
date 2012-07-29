@@ -237,6 +237,28 @@ class ZKUtil(object):
                          ZKUtil.ACL,
                          zookeeper.EPHEMERAL)
 
+    def claim_partition(self, consumer_group, consumer_id, topic, bp):
+        self._create_path_if_needed(self.path_for_partition_owners(consumer_group, topic))
+        partition_owner_path = self.path_for_partition_owner(consumer_group,
+                                                             topic,
+                                                             bp)
+        log.info("Consumer {0} claiming ownership of partition {1}"
+                 .format(consumer_id, bp))
+        zookeeper.create(self._zk.handle,
+                         partition_owner_path,
+                         consumer_id,
+                         ZKUtil.ACL,
+                         zookeeper.EPHEMERAL)
+
+    def release_partition(self, consumer_group, consumer_id, topic, bp):
+        partition_owner_path = self.path_for_partition_owner(consumer_group,
+                                                             topic,
+                                                             bp)
+        log.info("Consumer {0} releasing ownership of partition {1}"
+                 .format(consumer_id, bp))
+        self._zk.delete(partition_owner_path)
+        
+
     def _create_path_if_needed(self, path, data=None):
         """Creates permanent nodes for all elements in the path if they don't
         already exist. Places data for each node created. (You'll probably want
@@ -296,6 +318,13 @@ class ZKUtil(object):
     def path_for_consumer_id(self, consumer_group, consumer_id):
         return u"{0}/{1}".format(self.path_for_consumer_ids(consumer_group),
                                  consumer_id)
+
+    def path_for_partition_owners(self, consumer_group, topic):
+        return u"/consumers/{0}/owners/{1}".format(consumer_group, topic)
+
+    def path_for_partition_owner(self, consumer_group, topic, bp):
+        return u"/consumers/{0}/owners/{1}/{2}".format(consumer_group,
+                                                       topic, bp)
 
     def _zk_properties(self, path):
         node_data = self._zk.properties(path).data
@@ -704,14 +733,15 @@ class ZKConsumer(object):
         else:
             start = (len(consumers_with_extra) * (bp_per_consumer + 1)) + \
                     ((my_index - len(consumers_with_extra)) * bp_per_consumer)
-
         ############## Set our state info... ##############
-        self._broker_partitions = all_broker_partitions[start:start+num_parts]
 
+        self._broker_partitions = all_broker_partitions[start:start+num_parts]
+        print self._broker_partitions
         # We keep a mapping of BrokerPartitions to their offsets. We ditch those
         # BrokerPartitions we are no longer responsible for...
         for bp in self._bps_to_next_offsets.keys():
             if bp not in self._broker_partitions:
+                self._zk_util.release_partition(self.consumer_group, self.id, self.topic, bp)
                 del self._bps_to_next_offsets[bp]
 
         # We likewise add new BrokerPartitions we're responsible for to our 
@@ -719,6 +749,7 @@ class ZKConsumer(object):
         # we don't know, and we have to check ZK for them.
         for bp in self._broker_partitions:
             self._bps_to_next_offsets.setdefault(bp, None)
+            self._zk_util.claim_partition(self.consumer_group, self.id, self.topic, bp)
 
         # This will collapse duplicates so we only have one conn per host/port
         broker_conn_info = frozenset((bp.broker_id, bp.host, bp.port)
