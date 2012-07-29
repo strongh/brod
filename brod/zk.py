@@ -237,18 +237,28 @@ class ZKUtil(object):
                          ZKUtil.ACL,
                          zookeeper.EPHEMERAL)
 
-    def claim_partition(self, consumer_group, consumer_id, topic, bp):
+    def claim_partition(self, consumer_group, consumer_id, topic, bp, retry_limit=3, retry_attempts=0):
         self._create_path_if_needed(self.path_for_partition_owners(consumer_group, topic))
         partition_owner_path = self.path_for_partition_owner(consumer_group,
                                                              topic,
                                                              bp)
         log.info("Consumer {0} claiming ownership of partition {1}"
                  .format(consumer_id, bp))
-        zookeeper.create(self._zk.handle,
-                         partition_owner_path,
-                         consumer_id,
-                         ZKUtil.ACL,
-                         zookeeper.EPHEMERAL)
+        try:
+            zookeeper.create(self._zk.handle,
+                             partition_owner_path,
+                             consumer_id,
+                             ZKUtil.ACL,
+                             zookeeper.EPHEMERAL)
+        except zookeeper.NodeExistsException:
+            log.info("Consumer {0} failed to claim ownership of partition {1}, this is attempt {2}"
+                     .format(consumer_id, bp, retry_attempts))
+            time.sleep(0.4)
+            if retry_attempts < retry_limit:
+                self.claim_partition(consumer_group, consumer_id, topic, bp, 
+                                     retry_attempts=retry_attempts+1)
+            else:
+                raise zookeeper.NodeExistsException # another consumer owns this partition and isn't giving up
 
     def release_partition(self, consumer_group, consumer_id, topic, bp):
         partition_owner_path = self.path_for_partition_owner(consumer_group,
@@ -570,6 +580,7 @@ class ZKConsumer(object):
         # multifetch or performance is going to suck wind later)...
         message_sets = []
         # We only iterate over those broker partitions for which we have offsets
+
         for bp in bps_to_offsets:
             offset = bps_to_offsets[bp]
             kafka = self._connections[bp.broker_id]
@@ -736,12 +747,12 @@ class ZKConsumer(object):
         ############## Set our state info... ##############
 
         self._broker_partitions = all_broker_partitions[start:start+num_parts]
-        print self._broker_partitions
+
         # We keep a mapping of BrokerPartitions to their offsets. We ditch those
         # BrokerPartitions we are no longer responsible for...
         for bp in self._bps_to_next_offsets.keys():
             if bp not in self._broker_partitions:
-                self._zk_util.release_partition(self.consumer_group, self.id, self.topic, bp)
+                self._zk_util.release_partition(self.consumer_group, self.id, self.topic, bp.id)
                 del self._bps_to_next_offsets[bp]
 
         # We likewise add new BrokerPartitions we're responsible for to our 
@@ -749,8 +760,8 @@ class ZKConsumer(object):
         # we don't know, and we have to check ZK for them.
         for bp in self._broker_partitions:
             self._bps_to_next_offsets.setdefault(bp, None)
-            self._zk_util.claim_partition(self.consumer_group, self.id, self.topic, bp)
-
+            self._zk_util.claim_partition(self.consumer_group, self.id, self.topic, bp.id)
+            
         # This will collapse duplicates so we only have one conn per host/port
         broker_conn_info = frozenset((bp.broker_id, bp.host, bp.port)
                                      for bp in self._broker_partitions)
@@ -761,7 +772,7 @@ class ZKConsumer(object):
         self._register_callbacks()
         if self._all_callbacks_registered():
             self._needs_rebalance = False
-        
+
         # Report our progress
         log.info("Rebalance finished for Consumer {0}: {1}".format(self.id, unicode(self)))
 
