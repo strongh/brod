@@ -26,7 +26,7 @@ __all__ = [
     'ConsumerStats'
 ]
 
-VERSION_0_7 = False
+VERSION_0_7 = True
 
 class KafkaError(Exception): pass
 class ConnectionFailure(KafkaError): pass
@@ -50,7 +50,7 @@ MULTIFETCH_REQUEST   = 2
 MULTIPRODUCE_REQUEST = 3
 OFFSETS_REQUEST      = 4
 
-MAGIC_BYTE = 0
+MAGIC_BYTE = int(VERSION_0_7) # expect a magic byte?
 
 LATEST_OFFSET   = -1
 EARLIEST_OFFSET = -2
@@ -371,8 +371,7 @@ class BaseKafka(object):
             message_buffer):
         if message_buffer:
             messages = list(self._parse_message_set(
-                start_offset, message_buffer, include_corrupt)
-            )
+                    start_offset, message_buffer, include_corrupt))
         else:
             messages = []
 
@@ -382,12 +381,11 @@ class BaseKafka(object):
             return messages
 
     def _parse_message_set(self, start_offset, message_buffer, 
-            include_corrupt=False):
+                           include_corrupt=False):
         offset = start_offset
         
         try:
-            has_more = True
-            while has_more:
+            while True:
                 offset = start_offset + message_buffer.tell() - Lengths.ERROR_CODE
                 
                 # Parse the message length (uint:4)
@@ -410,7 +408,7 @@ class BaseKafka(object):
                 
                 magic = struct.unpack('>B', raw_magic)[0]
                 if magic == 1:
-                    compression = message_buffer.read(Lengths.COMPRESSION)
+                    compression = struct.unpack('>B', message_buffer.read(Lengths.COMPRESSION))[0]
                     # We don't do anything with this at the moment.
                 
                 # Parse the checksum (int:4)
@@ -422,14 +420,14 @@ class BaseKafka(object):
                 checksum = struct.unpack('>i', raw_checksum)[0]
                 
                 # Parse the payload (variable length string)
-                payload_length = message_length - Lengths.MAGIC - Lengths.CHECKSUM
+                payload_length = message_length - Lengths.MAGIC - Lengths.CHECKSUM - magic
                 payload = message_buffer.read(payload_length)
                 if len(payload) < payload_length and not self.include_corrupt:
                     # This is not an error - this happens everytime we reach
                     # the end of the read buffer without having parsed a complete msg
                     # kafka_log.error('Unexpected end of message set. Expected {0} bytes for payload, only read {1}'.format(payload_length, len(payload)))
                     break
-                
+
                 actual_checksum = self.compute_checksum(payload)
                 if magic != MAGIC_BYTE:
                     kafka_log.error('Unexpected magic byte: {0} (expecting {1})'.format(magic, MAGIC_BYTE))
