@@ -37,7 +37,7 @@ http://incubator.apache.org/kafka/
 
     import brod
     kafka = brod.Kafka(host='localhost')
-    for offset, message in brod.fetch("test-topic", offset=0):
+    for offset, message in kafka.fetch("test-topic", offset=0):
         print message
 
 ### Using a ZooKeeper-based consumer
