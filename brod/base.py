@@ -51,6 +51,7 @@ MULTIPRODUCE_REQUEST = 3
 OFFSETS_REQUEST      = 4
 
 MAGIC_BYTE = int(VERSION_0_7) # expect a magic byte?
+COMPRESSION_BYTE = 0
 
 LATEST_OFFSET   = -1
 EARLIEST_OFFSET = -2
@@ -476,12 +477,12 @@ class BaseKafka(object):
         message_set_buffer = StringIO()
 
         for message in messages:
-            # <<int:1, int:4, str>>
-            encoded_message = struct.pack('>Bi{0}s'.format(len(message)), 
-                MAGIC_BYTE, 
-                self.compute_checksum(message), 
-                message
-            )
+            # <<int:1,int:1, int:4, str>>
+            encoded_message = struct.pack('>BBi{0}s'.format(len(message)), 
+                                          MAGIC_BYTE, 
+                                          COMPRESSION_BYTE,
+                                          self.compute_checksum(message), 
+                                          message)
             message_size = len(encoded_message)
             bin_format = '>i{0}s'.format(message_size)
             message_set_buffer.write(struct.pack(bin_format, message_size, 
