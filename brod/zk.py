@@ -253,7 +253,7 @@ class ZKUtil(object):
         except zookeeper.NodeExistsException:
             log.info("Consumer {0} failed to claim ownership of partition {1}, this is attempt {2}"
                      .format(consumer_id, bp, retry_attempts))
-            time.sleep(0.4)
+            time.sleep(0.2)
             if retry_attempts < retry_limit:
                 self.claim_partition(consumer_group, consumer_id, topic, bp, 
                                      retry_attempts=retry_attempts+1)
@@ -745,14 +745,23 @@ class ZKConsumer(object):
             start = (len(consumers_with_extra) * (bp_per_consumer + 1)) + \
                     ((my_index - len(consumers_with_extra)) * bp_per_consumer)
         ############## Set our state info... ##############
+        new_partitions = all_broker_partitions[start:start+num_parts]
+        # not very pretty, but before we assume control of our new partitions
+        # update partition owner registry
+        for bp in new_partitions: 
+            if bp not in self._broker_partitions: # new partitions to claim
+                self._zk_util.claim_partition(self.consumer_group, self.id, self.topic, bp.id)
+                
+        for bp in self._broker_partitions:
+            if bp not in new_partitions: # old partitions to release
+                self._zk_util.release_partition(self.consumer_group, self.id, self.topic, bp.id)
 
-        self._broker_partitions = all_broker_partitions[start:start+num_parts]
+        self._broker_partitions = new_partitions
 
         # We keep a mapping of BrokerPartitions to their offsets. We ditch those
         # BrokerPartitions we are no longer responsible for...
         for bp in self._bps_to_next_offsets.keys():
             if bp not in self._broker_partitions:
-                self._zk_util.release_partition(self.consumer_group, self.id, self.topic, bp.id)
                 del self._bps_to_next_offsets[bp]
 
         # We likewise add new BrokerPartitions we're responsible for to our 
@@ -760,8 +769,8 @@ class ZKConsumer(object):
         # we don't know, and we have to check ZK for them.
         for bp in self._broker_partitions:
             self._bps_to_next_offsets.setdefault(bp, None)
-            self._zk_util.claim_partition(self.consumer_group, self.id, self.topic, bp.id)
-            
+
+
         # This will collapse duplicates so we only have one conn per host/port
         broker_conn_info = frozenset((bp.broker_id, bp.host, bp.port)
                                      for bp in self._broker_partitions)
