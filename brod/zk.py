@@ -634,7 +634,7 @@ class ZKConsumer(object):
 
         # Now persist our new offsets
         for msg_set in result:
-            self._ps_to_next_offsets[msg_set.broker_partition] = next_offset
+            self._bps_to_next_offsets[msg_set.broker_partition] = next_offset
 
         if self._autocommit:
             self.commit_offsets()

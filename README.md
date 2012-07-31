@@ -25,26 +25,26 @@ http://incubator.apache.org/kafka/
 
     import brod
     kafka = brod.Kafka(host='localhost')
-    kafka.produce("test-topic", "Hello World")
+    kafka.produce('test-topic', 'Hello World')
 
 ### Sending a sequence of messages
 
     import brod
     kafka = brod.Kafka(host='localhost')
-    kafka.produce("test-topic", ["Hello", "World"])
+    kafka.produce('test-topic', ['Hello', 'World'])
 
 ### Consuming messages one by one
 
     import brod
     kafka = brod.Kafka(host='localhost')
-    for offset, message in kafka.fetch("test-topic", offset=0):
+    for offset, message in kafka.fetch('test-topic', offset=0):
         print message
 
 ### Using a ZooKeeper-based consumer
 
     from brod.zk import ZKConsumer
 
-    consumer = ZKConsumer('zk_host:2181', 'my_consumer_group', 'my_topic', autocommit=True)
+    consumer = ZKConsumer('localhost:2181', 'test-consumer-group', 'test-topic', autocommit=True)
 
     # Polls forever
     for msg_set in consumer.poll(poll_interval=1):
@@ -80,20 +80,20 @@ http://incubator.apache.org/kafka/
     
         def _on_fetch(self, messages):
             for offset, message in messages:
-                self.write("{0}: {1}".format(offset, message))
+                self.write('{0}: {1}'.format(offset, message))
             self.finish()
     
 
     kafka = KafkaTornado()
 
     application = tornado.web.Application([
-        (r"/", MainHandler, {
+        (r'/', MainHandler, {
             'kafka': kafka,
             'topic': 'hello-world'
         }),
     ])
 
-    if __name__ == "__main__":
+    if __name__ == '__main__':
         parse_command_line()
         application.listen(8888)
         tornado.ioloop.IOLoop.instance().start()
