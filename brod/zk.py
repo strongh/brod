@@ -590,10 +590,10 @@ class ZKConsumer(object):
                 offset = partition.latest_offset()
             
             try:
-                offsets_msgs = kafka.fetch(bp.topic, 
-                                           offset,
-                                           partition=bp.partition,
-                                           max_size=max_size)
+                offsets_msgs, next_offset = kafka.fetch(bp.topic, 
+                                                        offset,
+                                                        partition=bp.partition,
+                                                        max_size=max_size)
 
             # If our fetch fails because it's out of range, and the values came
             # from ZK originally (not our internal incrementing), we assume ZK
@@ -605,10 +605,10 @@ class ZKConsumer(object):
                     offset = partition.latest_offset()
                     log.error("Retrying with offset {0} for {1}"
                               .format(offset, bp))
-                    offsets_msgs = kafka.fetch(bp.topic, 
-                                               offset,
-                                               partition=bp.partition,
-                                               max_size=max_size)
+                    offsets_msgs, next_offset = kafka.fetch(bp.topic, 
+                                                            offset,
+                                                            partition=bp.partition,
+                                                            max_size=max_size)
                 else:
                     raise
             except KafkaError as k_err:
@@ -625,7 +625,7 @@ class ZKConsumer(object):
             old_stats = self._stats[bp]
             self._stats[bp] = ConsumerStats(fetches=old_stats.fetches + 1,
                                         bytes=old_stats.bytes + msg_set.size,
-                                        messages=old_stats.messages + len(msg_set),
+                                            messages=old_stats.messages + len(msg_set),
                                         max_fetch=max(old_stats.max_fetch, msg_set.size))
 
             message_sets.append(msg_set)
@@ -634,7 +634,7 @@ class ZKConsumer(object):
 
         # Now persist our new offsets
         for msg_set in result:
-            self._bps_to_next_offsets[msg_set.broker_partition] = msg_set.next_offset
+            self._ps_to_next_offsets[msg_set.broker_partition] = next_offset
 
         if self._autocommit:
             self.commit_offsets()

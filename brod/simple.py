@@ -100,13 +100,13 @@ class SimpleConsumer(object):
             offset = bps_to_offsets[bp]
             kafka = self._connections[bp.broker_id]
 
-            offsets_msgs = kafka.fetch(bp.topic, 
-                                       offset,
-                                       partition=bp.partition,
-                                       max_size=max_size)
+            offsets_msgs, next_offset = kafka.fetch(bp.topic, 
+                                                    offset,
+                                                    partition=bp.partition,
+                                                    max_size=max_size)
 
             msg_set = MessageSet(bp, offset, offsets_msgs)
-
+            msg_set.next_offset = next_offset
             # fetches bytes messages max_fetch
             old_stats = self._stats[bp]
             self._stats[bp] = ConsumerStats(fetches=old_stats.fetches + 1,

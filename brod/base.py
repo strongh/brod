@@ -26,8 +26,6 @@ __all__ = [
     'ConsumerStats'
 ]
 
-VERSION_0_7 = True
-
 class KafkaError(Exception): pass
 class ConnectionFailure(KafkaError): pass
 class OffsetOutOfRange(KafkaError): pass
@@ -50,7 +48,7 @@ MULTIFETCH_REQUEST   = 2
 MULTIPRODUCE_REQUEST = 3
 OFFSETS_REQUEST      = 4
 
-MAGIC_BYTE = int(VERSION_0_7) # expect a magic byte?
+MAGIC_BYTE = 1
 COMPRESSION_BYTE = 0
 
 LATEST_OFFSET   = -1
@@ -197,19 +195,6 @@ class MessageSet(object):
         return self.offsets[-1] if self else None
 
     @property
-    def next_offset(self):
-        # FIXME FIXME FIXME: This calcuation should be done at a much deeper
-        # level, or else this won't work with compressed messages, or be able
-        # to detect the difference between 0.6 and 0.7 headers
-        if not self:
-            return self._start_offset # We didn't read anything
-
-        MESSAGE_HEADER_SIZE = 10 if VERSION_0_7 else 9
-        last_offset, last_msg = self._offsets_msgs[-1]
-        next_offset = last_offset + len(last_msg) + MESSAGE_HEADER_SIZE
-        return next_offset
-
-    @property
     def size(self):
         return sum(len(msg) for msg in self.messages)
 
@@ -316,7 +301,7 @@ class BaseKafka(object):
         # Send the request. The logic for handling the response 
         # is in _read_fetch_response().
         try:
-            result = self._write(
+            result, offset = self._write(
                 fetch_request_size, 
                 partial(self._wrote_request_size, 
                         fetch_request, 
@@ -329,7 +314,7 @@ class BaseKafka(object):
             kafka_log.exception(io_err)
             raise ConnectionFailure("Fetch failure because of: {0}".format(io_err))
 
-        return result
+        return result, offset
 
     def offsets(self, topic, time_val, max_offsets, partition=None, callback=None):
         
@@ -373,13 +358,19 @@ class BaseKafka(object):
         if message_buffer:
             messages = list(self._parse_message_set(
                     start_offset, message_buffer, include_corrupt))
+            if messages:
+                next_offset = messages[-1][1]
+            else: 
+                next_offset = start_offset
+            messages = [(m[0], m[2]) for m in messages]
         else:
+            next_offset = start_offset
             messages = []
 
         if callback:
-            return callback(messages)
+            return callback(messages), next_offset
         else:
-            return messages
+            return messages, next_offset
 
     def _parse_message_set(self, start_offset, message_buffer, 
                            include_corrupt=False):
@@ -430,22 +421,19 @@ class BaseKafka(object):
                     break
 
                 actual_checksum = self.compute_checksum(payload)
-                if magic != MAGIC_BYTE:
-                    kafka_log.error('Unexpected magic byte: {0} (expecting {1})'.format(magic, MAGIC_BYTE))
-                    corrupt = True
 
-                elif checksum != actual_checksum:
+                if checksum != actual_checksum:
                     kafka_log.error('Checksum failure at offset {0}'.format(offset))
                     corrupt = True
                 else:
                     corrupt = False
-
+            
                 if include_corrupt:
                     # kafka_log.debug('message {0}: (offset: {1}, {2} bytes, corrupt: {3})'.format(payload, offset, message_length, corrupt))
-                    yield offset, payload, corrupt
+                    yield offset, offset + len(payload) + 9 + magic, payload, corrupt
                 else:
                     # kafka_log.debug('message {0}: (offset: {1}, {2} bytes)'.format(payload, offset, message_length))
-                    yield offset, payload
+                    yield offset, offset + len(payload) + 9 + magic, payload
         except:
             kafka_log.error("Unexpected error:{0}".format(sys.exc_info()[0]))
         finally:
