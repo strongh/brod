@@ -620,7 +620,7 @@ class ZKConsumer(object):
                     raise
 
             msg_set = MessageSet(bp, offset, offsets_msgs)
-
+            msg_set.next_offset = next_offset
             # fetches bytes messages max_fetch
             old_stats = self._stats[bp]
             self._stats[bp] = ConsumerStats(fetches=old_stats.fetches + 1,
@@ -634,7 +634,7 @@ class ZKConsumer(object):
 
         # Now persist our new offsets
         for msg_set in result:
-            self._bps_to_next_offsets[msg_set.broker_partition] = next_offset
+            self._bps_to_next_offsets[msg_set.broker_partition] = msg_set.next_offset
 
         if self._autocommit:
             self.commit_offsets()
