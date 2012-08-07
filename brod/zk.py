@@ -237,7 +237,7 @@ class ZKUtil(object):
                          ZKUtil.ACL,
                          zookeeper.EPHEMERAL)
 
-    def claim_partition(self, consumer_group, consumer_id, topic, bp, retry_limit=6, retry_attempts=0):
+    def claim_partition(self, consumer_group, consumer_id, topic, bp, retry_limit=5, retry_attempts=0):
         self._create_path_if_needed(self.path_for_partition_owners(consumer_group, topic))
         partition_owner_path = self.path_for_partition_owner(consumer_group,
                                                              topic,
@@ -253,7 +253,7 @@ class ZKUtil(object):
         except zookeeper.NodeExistsException:
             log.info("Consumer {0} failed to claim ownership of partition {1}, this is attempt {2}"
                      .format(consumer_id, bp, retry_attempts))
-            time.sleep(0.3)
+            time.sleep(2)
             if retry_attempts < retry_limit:
                 self.claim_partition(consumer_group, consumer_id, topic, bp, 
                                      retry_attempts=retry_attempts+1)
