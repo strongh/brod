@@ -436,13 +436,14 @@ class ZKProducer(object):
 class ZKConsumer(object):
     """Take 2 on the rebalancing code."""
 
-    def __init__(self, zk_conn, consumer_group, topic, autocommit=True, zk_timeout=None):
+    def __init__(self, zk_conn, consumer_group, topic, autocommit=True, zk_timeout=None, max_size=None):
         """FIXME: switch arg order and default zk_conn to localhost?"""
         # Simple attributes we return as properties
         self._id = self._create_consumer_id(consumer_group)
         self._topic = topic
         self._consumer_group = consumer_group
         self._autocommit = autocommit
+        self._max_size
 
         # Internal vars
         self._zk_util = ZKUtil(zk_conn, zk_timeout)
@@ -654,7 +655,7 @@ class ZKConsumer(object):
              retry_limit=3):
         """FIXME: start/end, retry_limit"""
         while True:
-            for msg_set in self.fetch(max_size=max_size):
+            for msg_set in self.fetch(max_size=max_size or self._max_size):
                 yield msg_set
             time.sleep(poll_interval)
 
