@@ -253,6 +253,7 @@ class ZKUtil(object):
         except zookeeper.NodeExistsException:
             log.info("Consumer {0} failed to claim ownership of partition {1}, this is attempt {2}"
                      .format(consumer_id, bp, retry_attempts))
+            self.release_partition(consumer_group, consumer_id, topic, bp) # analagous to kafka client behavior
             time.sleep(2)
             if retry_attempts < retry_limit:
                 self.claim_partition(consumer_group, consumer_id, topic, bp, 
