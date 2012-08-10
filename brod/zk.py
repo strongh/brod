@@ -443,7 +443,7 @@ class ZKConsumer(object):
         self._topic = topic
         self._consumer_group = consumer_group
         self._autocommit = autocommit
-        self._max_size
+        self._max_size = max_size
 
         # Internal vars
         self._zk_util = ZKUtil(zk_conn, zk_timeout)
