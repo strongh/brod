@@ -156,6 +156,7 @@ class TestTopic(unittest.TestCase):
         self.assertRaises(StopIteration, dogs.next)
     
         
+ 
 
 if __name__ == '__main__':
     logging.basicConfig(
