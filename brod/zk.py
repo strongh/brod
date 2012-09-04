@@ -7,6 +7,7 @@ TODO:
 FIXME: Extract the logic for testing how the brokers get partitioned so we can
        test them in simple unit tests without involving Kafka/ZK.
 """
+import sys
 import json
 import logging
 import platform
@@ -25,6 +26,11 @@ from brod.simple import SimpleConsumer
 from brod.blocking import Kafka
 
 log = logging.getLogger('brod.zk')
+hdlr = logging.FileHandler('/var/log/luckysort/brod.log')
+formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+hdlr.setFormatter(formatter)
+log.addHandler(hdlr) 
+log.setLevel(logging.DEBUG)
 
 class NoAvailablePartitionsError(KafkaError): pass
 class ConsumerEntryNotFoundError(KafkaError): pass
@@ -253,7 +259,7 @@ class ZKUtil(object):
         except zookeeper.NodeExistsException:
             log.info("Consumer {0} failed to claim ownership of partition {1}, this is attempt {2}"
                      .format(consumer_id, bp, retry_attempts))
-            self.release_partition(consumer_group, consumer_id, topic, bp) # analagous to kafka client behavior
+            #self.release_partition(consumer_group, consumer_id, topic, bp) # analagous to kafka client behavior
             time.sleep(2)
             if retry_attempts < retry_limit:
                 self.claim_partition(consumer_group, consumer_id, topic, bp, 
@@ -267,6 +273,7 @@ class ZKUtil(object):
                                                              bp)
         log.info("Consumer {0} releasing ownership of partition {1}"
                  .format(consumer_id, bp))
+        print partition_owner_path
         self._zk.delete(partition_owner_path)
         
 
